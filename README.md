@@ -29,6 +29,10 @@ Each `--flag` on `deploy.sh` allows for updating each portion separately on AWS:
 - `--lambda` will zip and deploy the python code unto lambda.
 - `--schedule` will update the `cron`-like scheduled runs for triggering the lambda functions.
 
+Don't forget to update the `tag key` + `tag value` used [here](https://github.com/ifarfan/ami-backup-buddy/blob/master/ami_shared.py#L23-L24) to match your own. These are used by the lambda functions to query which servers will be the ones snapshotted.
+
+Last, how long to keep AMIs for and how often they are taken are set [here](https://github.com/ifarfan/ami-backup-buddy/blob/master/ami_shared.py#L26-L29). Again, update to your own values.
+
 
 ## Notifications
 Set to notify via Slack / Email (via SNS) on success and failure.
@@ -44,6 +48,9 @@ Update the [following lines](https://github.com/ifarfan/ami-backup-buddy/blob/ma
 
 
 ## **Oh god, why?!?:**
+
+Because _**serverless**_ is currently all the rage... :sunglasses: :grimacing:
+
 
 I've been to enough places that have really old, irreplaceble and unrebootable AWS EC2 instances laying around with not enough documentation behind them that, at a minimum, require for some sort of backup plan around them in the event they go **bump** in the middle of the night.
 
