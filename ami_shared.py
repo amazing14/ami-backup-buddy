@@ -34,7 +34,7 @@ RETENTION_DAYS_GRACE = 8
 BACKUP_HOURS_GRACE   = 8
 
 #  Global notification
-ARN_TOPIC_ALERT = 'arn:aws:sns:us-east-1:876015318607:alerts'
+ARN_TOPIC_ALERT = 'arn:aws:sns:us-east-1:999999999999:my_alerts'                #  ! Change to your own!
 
 #  Slack-related
 SLACK_WEB_HOOK = 'https://hooks.slack.com/services/GIBBERISH_STRING'            #  ! Change to your own!
