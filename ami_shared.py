@@ -4,7 +4,6 @@
  Data + functions used by calling lambda functions
 """
 
-
 #  General libraries
 import boto3
 import logging
@@ -12,36 +11,27 @@ import datetime
 import dateutil.parser
 import dateutil.tz
 import time
-import urllib2
-import urllib
 import json
-
 
 #  Constants
 
 #  ONLY servers with these tag:value combo are backed-up
-TAG_KEY   = 'Environment'
-TAG_VALUE = 'production'
+TAG_KEY = 'AMIBackup'
+TAG_VALUE = 'yes'
 
 #  How long to keep backups (days)
 RETENTION_DAYS = 7
 #  How often to backup (hours) (NOTE: this is set on 'deploy.sh')
-BACKUP_HOURS   = 4
+BACKUP_HOURS = 4
 
 #  How old the "oldest" backup can be before we alert
 RETENTION_DAYS_GRACE = 8
+
 #  How much time since "newest" backup before we alert
-BACKUP_HOURS_GRACE   = 8
+BACKUP_HOURS_GRACE = 8
 
 #  Global notification
-ARN_TOPIC_ALERT = 'arn:aws:sns:us-east-1:999999999999:my_alerts'                #  ! Change to your own!
-
-#  Slack-related
-SLACK_WEB_HOOK = 'https://hooks.slack.com/services/GIBBERISH_STRING'            #  ! Change to your own!
-SLACK_CHANNEL  = 'ops'                                                          #  ! Change to your own!
-SLACK_ICON     = 'robot'
-SLACK_JOBNAME  = 'backup-buddy'
-TXT_HEADER     = '[ *Server* | _AMI_ID_ | Taken On ]\n'
+ARN_TOPIC_ALERT = 'arn:aws:sns:us-east-1:999999999999:my_alerts'  # ! Change to your own!
 
 #  Global objects
 ec2 = boto3.client('ec2')
@@ -53,13 +43,13 @@ logger.setLevel(logging.INFO)
 today = datetime.datetime.utcnow().replace(tzinfo=dateutil.tz.tzutc())
 
 #  Global lists
-image_status_list     = []
-create_success_list   = []
-create_failure_list   = []
-delete_success_list   = []
-delete_failure_list   = []
-missing_backup_list   = []
-expired_backup_list   = []
+image_status_list = []
+create_success_list = []
+create_failure_list = []
+delete_success_list = []
+delete_failure_list = []
+missing_backup_list = []
+expired_backup_list = []
 no_recent_backup_list = []
 #  Hold custom values
 variables_list = []
@@ -72,13 +62,13 @@ def image_status_add(instance_id, instance_name, image_id, image_name, create_dt
     """
 
     image_status_list.append({
-        "instance_id":   instance_id,
+        "instance_id": instance_id,
         "instance_name": instance_name.replace(".guruse.com", ""),
-        "image_id":      image_id,
-        "image_name":    image_name,
-        "create_dt":     create_dt,
-        "action":        action,
-        "is_success":    is_success
+        "image_id": image_id,
+        "image_name": image_name,
+        "create_dt": create_dt,
+        "action": action,
+        "is_success": is_success
     })
     return
 
@@ -89,161 +79,9 @@ def variables_add(var_title, var_value):
     """
 
     variables_list.append({
-        "var_title":  var_title.upper(),
-        "var_value":  var_value
+        "var_title": var_title.upper(),
+        "var_value": var_value
     })
-    return
-
-
-def slack_message(color, text_msg, func_name):
-    """
-    Send message to 'Ops' channel
-    """
-
-    #  Global lists
-    global create_success_list, create_failure_list
-    global delete_success_list, delete_failure_list
-    global missing_backup_list, expired_backup_list, no_recent_backup_list
-
-    #  Init strings
-    create_success_text, create_failure_text = TXT_HEADER, TXT_HEADER
-    delete_success_text, delete_failure_text = TXT_HEADER, TXT_HEADER
-    missing_backup_text, expired_backup_text = TXT_HEADER, TXT_HEADER
-    no_recent_backup_text = TXT_HEADER
-
-    #  Init JSON payload
-    slack_data = {
-        "channel": "%s" % SLACK_CHANNEL,
-        "attachments": [{
-            "icon_emoji": "%s" % SLACK_ICON,
-            "color": "%s" % color,
-            "fallback": "%s" % text_msg,
-            "author_name": "aws_lambda",
-            "title": "%s" % SLACK_JOBNAME,
-            "pre_text": "%s" % text_msg,
-            "text": "%s\n" % text_msg,
-            "fields": [],
-            "footer": "%s" % func_name,
-            "ts": "%i" % int(time.time()),
-            "mrkdwn_in": ["text", "pretext", "title", "fields"]
-        }]
-    }
-
-    #  Draft message/alert per list
-    if create_success_list:
-        for x in create_success_list:
-            create_success_text += '*%s* | _%s_ | %s\n' % (
-                x['instance_name'],
-                x['image_id'],
-                x['create_dt'])
-
-        slack_data['attachments'][0]['fields'].append(
-            {
-                "title": "Backups taken (`Pass`):",
-                "value": "%s\n\n" % create_success_text,
-                "short": False
-            }
-        )
-
-    if create_failure_list:
-        for x in create_failure_list:
-            create_failure_text += '%s | -- | --\n' % x['instance_name']
-
-        slack_data['attachments'][0]['fields'].append(
-            {
-                "title": "Backups NOT taken (`Fail`):",
-                "value": "%s\n\n" % create_failure_text,
-                "short": False
-            }
-        )
-
-    if delete_success_list:
-        for x in delete_success_list:
-            delete_success_text += '*%s* | _%s_ | %s\n' % (
-                x['instance_name'],
-                x['image_id'],
-                x['create_dt'])
-
-        slack_data['attachments'][0]['fields'].append(
-            {
-                "title": "Expired backups deleted (`Pass`):",
-                "value": "%s\n\n" % delete_success_text,
-                "short": False
-            }
-        )
-
-    if delete_failure_list:
-        for x in delete_failure_list:
-            delete_failure_text += '*%s* | _%s_ | %s\n' % (
-                x['instance_name'],
-                x['image_id'],
-                x['create_dt'])
-
-        slack_data['attachments'][0]['fields'].append(
-            {
-                "title": "Expired backups NOT deleted (`Fail`):",
-                "value": "%s\n\n" % delete_failure_text,
-                "short": False
-            }
-        )
-
-    if missing_backup_list:
-        for x in missing_backup_list:
-            missing_backup_text += '%s | -- | --\n' % x['instance_name']
-
-        slack_data['attachments'][0]['fields'].append(
-            {
-                "title": "Server(s) with NO backups (`Fail`):",
-                "value": "%s\n\n" % missing_backup_text,
-                "short": False
-            }
-        )
-
-    if expired_backup_list:
-        for x in expired_backup_list:
-            expired_backup_text += '*%s* | _%s_ | %s\n' % (
-                x['instance_name'],
-                x['image_id'],
-                x['create_dt'])
-
-        slack_data['attachments'][0]['fields'].append(
-            {
-                "title": "Expired backups left behind (`Fail`):",
-                "value": "%s\n\n" % expired_backup_text,
-                "short": False
-            }
-        )
-
-    if no_recent_backup_list:
-        for x in no_recent_backup_list:
-            no_recent_backup_text += '*%s* | _%s_ | %s\n' % (
-                x['instance_name'],
-                x['image_id'],
-                x['create_dt'])
-
-        slack_data['attachments'][0]['fields'].append(
-            {
-              "title": "Server(s) missing recent backups taken (`Fail`):",
-              "value": "%s\n\n" % no_recent_backup_text,
-              "short": False
-            }
-        )
-
-    #  Post to Slack
-    try:
-        data = json.dumps(slack_data)
-        req = urllib2.Request(
-            SLACK_WEB_HOOK,
-            data,
-            {'Content-Type': 'application/json'}
-        )
-        f = urllib2.urlopen(req)
-        response = f.read()
-        f.close()
-    except Exception as e:
-        logger.error('WTF! Unable to send message to Slack')
-        logger.exception(e)
-
     return
 
 
@@ -259,13 +97,13 @@ def send_via_email(script_file, title):
         #  Header
         report_msg = []
         report_msg.append('-' * 40)
-        report_msg.append('BACKUP-BUDDY STATUS REPORT')
+        report_msg.append('AMI-AUTOMATION STATUS REPORT')
         report_msg.append('-' * 40)
         report_msg.append('{:13} : '.format('AWS REGION') + '{:16}'.format(sess.region_name))
-        report_msg.append('{:13} : '.format('DATE-TIME')  + '{:16}'.format(today.isoformat()))
-        report_msg.append('{:13} : '.format('ITEMS')      + '{0}'.format(len(image_status_list)))
-        report_msg.append('{:13} : '.format('TITLE')      + '{:16}'.format(title))
-        report_msg.append('{:13} : '.format('SCRIPT')     + '{:16}'.format(script_file))
+        report_msg.append('{:13} : '.format('DATE-TIME') + '{:16}'.format(today.isoformat()))
+        report_msg.append('{:13} : '.format('ITEMS') + '{0}'.format(len(image_status_list)))
+        report_msg.append('{:13} : '.format('TITLE') + '{:16}'.format(title))
+        report_msg.append('{:13} : '.format('SCRIPT') + '{:16}'.format(script_file))
         report_msg.append('-' * 40)
 
         #  Add custom variables
@@ -433,11 +271,10 @@ def send_via_email(script_file, title):
 
         #  Send report via SNS notification
         sns.publish(
-            TopicArn = ARN_TOPIC_ALERT,
-            Subject  = "Backup-Buddy Status Report [%s] @ [%s]" % (sess.region_name, today.strftime('%Y-%m-%d %H:%M %Z')),
-            Message  = "\n".join(report_msg))
+            TopicArn=ARN_TOPIC_ALERT,
+            Subject="AMI Automation - Status Report [%s] @ [%s]" % (sess.region_name, today.strftime('%Y-%m-%d %H:%M %Z')),
+            Message="\n".join(report_msg))
     else:
-        #  Alles klar, herr kommissar!
         logger.info('Woo-hoo! No errors reported!')
 
     return
@@ -516,14 +353,10 @@ def generate_report(script_file, title='', email_report=False):
         else:
             msg_status = 'warning'
 
-        #  Slack me!
-        slack_message(msg_status, title, script_file)
-
         #  Send email report
         if email_report:
             send_via_email(script_file, title)
     else:
-        #  Alles klar, herr kommissar!
         logger.info('Woo-hoo! No AMI errors reported!')
 
     return

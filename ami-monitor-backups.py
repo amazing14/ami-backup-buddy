@@ -7,7 +7,6 @@ Check that AMIs for these instances are being:
 - Disposed of after X number of days
 """
 
-
 #  Imports are bundled local to the lambda function
 from ami_shared import *
 
@@ -17,8 +16,8 @@ def instance_ami_add(instance_ami_list, image_id, image_name, image_create_dt):
     List of AMIs for an instance
     """
     instance_ami_list.append({
-        "image_id":        image_id,
-        "image_name":      image_name,
+        "image_id": image_id,
+        "image_name": image_name,
         "image_create_dt": dateutil.parser.parse(image_create_dt)
     })
     return
@@ -30,21 +29,21 @@ def lambda_handler(event, context):
     """
 
     #  Date range limits (earliest & latest)
-    recent_backup_date  = today - datetime.timedelta(hours=BACKUP_HOURS_GRACE)
+    recent_backup_date = today - datetime.timedelta(hours=BACKUP_HOURS_GRACE)
     expired_backup_date = today - datetime.timedelta(days=RETENTION_DAYS_GRACE)
     variables_add(
-        var_title = 'Latest backup date',
-        var_value = recent_backup_date.isoformat()
+        var_title='Latest backup date',
+        var_value=recent_backup_date.isoformat()
     )
     variables_add(
-        var_title = 'Oldest backup date',
-        var_value = expired_backup_date.isoformat()
+        var_title='Oldest backup date',
+        var_value=expired_backup_date.isoformat()
     )
 
     #  Find EC2 instances with backup tag
     instances = ec2.describe_instances(
         Filters=[{
-            'Name': 'tag:%s'  % (TAG_KEY),
+            'Name': 'tag:%s' % (TAG_KEY),
             'Values': [TAG_VALUE]
         }]
     )
@@ -75,10 +74,10 @@ def lambda_handler(event, context):
         instance_ami_list = []
         for image in images['Images']:
             instance_ami_add(
-                instance_ami_list = instance_ami_list,
-                image_id          = image['ImageId'],
-                image_name        = image['Name'],
-                image_create_dt   = image['CreationDate']
+                instance_ami_list=instance_ami_list,
+                image_id=image['ImageId'],
+                image_name=image['Name'],
+                image_create_dt=image['CreationDate']
             )
 
         if instance_ami_list:
@@ -98,15 +97,16 @@ def lambda_handler(event, context):
             image_create_dt = instance_ami_list_sorted[0]['image_create_dt']
             if image_create_dt < recent_backup_date:
                 image_status_add(
-                    instance_id   = instance["InstanceId"],
-                    instance_name = instance_name,
-                    image_id      = instance_ami_list_sorted[0]['image_id'],
-                    image_name    = instance_ami_list_sorted[0]['image_name'],
-                    create_dt     = image_create_dt,
-                    action        = 'CHECK_RECENT',
-                    is_success    = False
+                    instance_id=instance["InstanceId"],
+                    instance_name=instance_name,
+                    image_id=instance_ami_list_sorted[0]['image_id'],
+                    image_name=instance_ami_list_sorted[0]['image_name'],
+                    create_dt=image_create_dt,
+                    action='CHECK_RECENT',
+                    is_success=False
                 )
-                logger.error('WTF! Last backup for server=%s, instance_id=%s taken on [%s]', instance_name, instance["InstanceId"], image_create_dt)
+                logger.error('ERR! Last backup for server=%s, instance_id=%s taken on [%s]', instance_name,
+                             instance["InstanceId"], image_create_dt)
 
             #
             #  Find expired AMIs NOT being removed
@@ -119,30 +119,30 @@ def lambda_handler(event, context):
                 if i['image_create_dt'] < expired_backup_date
             ]:
                 image_status_add(
-                    instance_id   = instance["InstanceId"],
-                    instance_name = instance_name,
-                    image_id      = expired_list['image_id'],
-                    image_name    = expired_list['image_name'],
-                    create_dt     = expired_list['image_create_dt'],
-                    action        = 'CHECK_EXPIRED',
-                    is_success    = False
+                    instance_id=instance["InstanceId"],
+                    instance_name=instance_name,
+                    image_id=expired_list['image_id'],
+                    image_name=expired_list['image_name'],
+                    create_dt=expired_list['image_create_dt'],
+                    action='CHECK_EXPIRED',
+                    is_success=False
                 )
-                logger.error('WTF! Expired backup for server=%s, instance_id=%s taken on [%s]',
-                    instance_name,
-                    instance["InstanceId"],
-                    expired_list['image_create_dt'])
+                logger.error('ERR! Expired backup for server=%s, instance_id=%s taken on [%s]',
+                             instance_name,
+                             instance["InstanceId"],
+                             expired_list['image_create_dt'])
         else:
             #  No AMIs found!
             image_status_add(
-                instance_id   = instance["InstanceId"],
-                instance_name = instance_name,
-                image_id      = None,
-                image_name    = None,
-                create_dt     = None,
-                action        = 'CHECK_MISSING',
-                is_success    = False
+                instance_id=instance["InstanceId"],
+                instance_name=instance_name,
+                image_id=None,
+                image_name=None,
+                create_dt=None,
+                action='CHECK_MISSING',
+                is_success=False
             )
-            logger.error('WTF! No AMIs found for server=%s, instance_id=%s', instance_name, instance_id)
+            logger.error('ERR! No AMIs found for server=%s, instance_id=%s', instance_name, instance["InstanceId"])
 
     #  Report on actions
     generate_report(
